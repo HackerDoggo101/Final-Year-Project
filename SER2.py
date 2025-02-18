@@ -1,18 +1,18 @@
-import streamlit as st
-import numpy as np
+import streamlit as st  
+import sounddevice as sd
 import soundfile as sf
+import numpy as np
 import torch
 import torch.nn.functional as F
 from transformers import Wav2Vec2FeatureExtractor, HubertForSequenceClassification
 import json
 import librosa
-import base64
-from io import BytesIO
+import io  # Added for handling in-memory audio
 
-# ✅ Set page config
+# ✅ Set page configuration
 st.set_page_config(page_title="Speech Emotion Recognition", page_icon="🎙️", layout="centered")
 
-# ✅ Load model
+# ✅ Load model and processor
 @st.cache_resource
 def load_model():
     processor = Wav2Vec2FeatureExtractor.from_pretrained("./saved_hubert_model", local_files_only=True)
@@ -27,19 +27,25 @@ with open("./emotions_map.json", "r") as f:
     emotions_map = json.load(f)
 emotions_map = {int(k): v for k, v in emotions_map.items()}
 
-# 🎵 Predict Emotion Function
+# 🎵 Process and Predict Emotion Function
 def predict_emotion(audio, sample_rate):
+    # Resample if needed
     if sample_rate != 16000:
         audio = librosa.resample(audio, orig_sr=sample_rate, target_sr=16000)
     
+    # Preprocess the audio
     inputs = processor(audio, sampling_rate=16000, return_tensors="pt", padding=True)
+
+    # Predict emotion
     with torch.no_grad():
         logits = model(**inputs).logits
         probabilities = F.softmax(logits, dim=-1).squeeze()
 
+    # Get predicted emotion
     predicted_class_id = torch.argmax(probabilities).item()
     predicted_emotion = emotions_map[predicted_class_id]
 
+    # Display results
     st.markdown(f"## 🎯 Detected Emotion: **{predicted_emotion}**")
     st.subheader("📊 Emotion Probabilities:")
     for class_id, prob in enumerate(probabilities):
@@ -49,76 +55,46 @@ def predict_emotion(audio, sample_rate):
 
 # ✅ Streamlit UI
 st.title("🎙️ Speech Emotion Recognition")
-st.write("Upload a **.wav file** or **record live audio** to detect emotions.")
+st.write("Choose between **uploading a file** or **live recording** to detect emotions.")
+
+# 🎤 Choose Input Method
+option = st.radio("Select an input method:", ["📂 Upload Audio File", "🎤 Live Recording"])
+
+# 🎤 Recording settings
+duration = 5  # Record for 5 seconds
+sampling_rate = 16000  # Required for the model
+
+# 🎤 Function to Record Audio and Save as WAV
+def record_audio(duration=5, sampling_rate=16000):
+    st.write("🔴 Recording... Speak now!")
+    audio = sd.rec(int(duration * sampling_rate), samplerate=sampling_rate, channels=1, dtype=np.float32)
+    sd.wait()  # Wait until recording is finished
+    st.write("✅ Recording complete!")
+
+    # Save as in-memory WAV file
+    wav_io = io.BytesIO()
+    sf.write(wav_io, audio, samplerate=sampling_rate, format='wav')
+    wav_io.seek(0)
+
+    return audio.flatten(), wav_io
 
 # 📂 Upload Audio File
-uploaded_file = st.file_uploader("Upload a .wav file", type=["wav"])
-if uploaded_file is not None:
-    st.audio(uploaded_file, format='audio/wav')
-    speech, sample_rate = sf.read(uploaded_file)
-    if len(speech.shape) == 2:
-        speech = np.mean(speech, axis=1)
-    predict_emotion(speech, sample_rate)
+if option == "📂 Upload Audio File":
+    uploaded_file = st.file_uploader("Upload a .wav file", type=["wav"])
+    if uploaded_file is not None:
+        st.audio(uploaded_file, format='audio/wav')
+        speech, sample_rate = sf.read(uploaded_file)
+        if len(speech.shape) == 2:  # Convert stereo to mono
+            speech = np.mean(speech, axis=1)
+        predict_emotion(speech, sample_rate)
 
-# 🎤 Live Recording with JavaScript
-st.markdown("---")
-st.subheader("🎤 Record Live Audio")
-
-# JavaScript to record audio in the browser
-st.markdown(
-    """
-    <script>
-        let mediaRecorder;
-        let audioChunks = [];
-
-        function startRecording() {
-            navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-                mediaRecorder = new MediaRecorder(stream);
-                mediaRecorder.start();
-                audioChunks = [];
-
-                mediaRecorder.addEventListener("dataavailable", event => {
-                    audioChunks.push(event.data);
-                });
-
-                mediaRecorder.addEventListener("stop", () => {
-                    const audioBlob = new Blob(audioChunks, { type: "audio/wav" });
-                    const reader = new FileReader();
-                    reader.readAsDataURL(audioBlob);
-                    reader.onloadend = () => {
-                        const base64String = reader.result.split(',')[1];
-                        fetch('/recorded_audio', {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ audio: base64String })
-                        });
-                    };
-                });
-            });
-        }
-
-        function stopRecording() {
-            if (mediaRecorder) {
-                mediaRecorder.stop();
-            }
-        }
-    </script>
-    <button onclick="startRecording()">🎙️ Start Recording</button>
-    <button onclick="stopRecording()">⏹️ Stop Recording</button>
-    """,
-    unsafe_allow_html=True
-)
-
-# 🔄 Handle recorded audio
-recorded_audio = st.experimental_get_query_params().get("recorded_audio")
-if recorded_audio:
-    audio_bytes = base64.b64decode(recorded_audio[0])
-    st.audio(audio_bytes, format="audio/wav")
-
-    # Process audio
-    audio_io = BytesIO(audio_bytes)
-    speech, sample_rate = sf.read(audio_io)
-    if len(speech.shape) == 2:
-        speech = np.mean(speech, axis=1)
-    
-    predict_emotion(speech, sample_rate)
+# 🎤 Live Recording
+elif option == "🎤 Live Recording":
+    if st.button("🎤 Start Recording"):
+        recorded_audio, wav_file = record_audio(duration, sampling_rate)
+        
+        # 🎵 Play back the recorded audio
+        st.audio(wav_file, format="audio/wav")
+        
+        # 🎵 Process for emotion detection
+        predict_emotion(recorded_audio, sampling_rate)
