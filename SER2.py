@@ -1,51 +1,63 @@
-import streamlit as st  
-# import sounddevice as sd
-import soundfile as sf
-import numpy as np
+import streamlit as st
+import gdown
+import os
 import torch
 import torch.nn.functional as F
 from transformers import Wav2Vec2FeatureExtractor, HubertForSequenceClassification
 import json
 import librosa
-import io  # Added for handling in-memory audio
+import numpy as np
+import soundfile as sf
 
-# ✅ Set page configuration
+# ✅ Set page config
 st.set_page_config(page_title="Speech Emotion Recognition", page_icon="🎙️", layout="centered")
 
-# ✅ Load model and processor
+# ✅ Define Google Drive model folder link (Replace with your link ID)
+GOOGLE_DRIVE_MODEL_LINK = "https://drive.google.com/uc?id=1LXL3F0oNbc3oBGVpJWVt4yrx3g9nqQu9"
+MODEL_DIR = "./saved_hubert_model"
+
+# ✅ Function to download and extract the model
 @st.cache_resource
-def load_model():
-    processor = Wav2Vec2FeatureExtractor.from_pretrained("./saved_hubert_model", local_files_only=True)
-    model = HubertForSequenceClassification.from_pretrained("./saved_hubert_model", local_files_only=True)
+def download_and_load_model():
+    if not os.path.exists(MODEL_DIR):
+        os.makedirs(MODEL_DIR, exist_ok=True)
+        with st.spinner("Downloading model..."):
+            output_path = os.path.join(MODEL_DIR, "model.zip")
+            gdown.download(GOOGLE_DRIVE_MODEL_LINK, output_path, quiet=False)
+
+            # Extract if it's a ZIP file
+            if output_path.endswith(".zip"):
+                import zipfile
+                with zipfile.ZipFile(output_path, "r") as zip_ref:
+                    zip_ref.extractall(MODEL_DIR)
+                os.remove(output_path)  # Remove ZIP file after extraction
+
+    processor = Wav2Vec2FeatureExtractor.from_pretrained(MODEL_DIR, local_files_only=True)
+    model = HubertForSequenceClassification.from_pretrained(MODEL_DIR, local_files_only=True)
     model.eval()
     return processor, model
 
-processor, model = load_model()
+# ✅ Load the model
+processor, model = download_and_load_model()
 
 # ✅ Load emotions map
-with open("./emotions_map.json", "r") as f:
+with open(os.path.join(MODEL_DIR, "emotions_map.json"), "r") as f:
     emotions_map = json.load(f)
 emotions_map = {int(k): v for k, v in emotions_map.items()}
 
-# 🎵 Process and Predict Emotion Function
+# 🎵 Predict Emotion Function
 def predict_emotion(audio, sample_rate):
-    # Resample if needed
     if sample_rate != 16000:
         audio = librosa.resample(audio, orig_sr=sample_rate, target_sr=16000)
     
-    # Preprocess the audio
     inputs = processor(audio, sampling_rate=16000, return_tensors="pt", padding=True)
-
-    # Predict emotion
     with torch.no_grad():
         logits = model(**inputs).logits
         probabilities = F.softmax(logits, dim=-1).squeeze()
 
-    # Get predicted emotion
     predicted_class_id = torch.argmax(probabilities).item()
     predicted_emotion = emotions_map[predicted_class_id]
 
-    # Display results
     st.markdown(f"## 🎯 Detected Emotion: **{predicted_emotion}**")
     st.subheader("📊 Emotion Probabilities:")
     for class_id, prob in enumerate(probabilities):
@@ -55,46 +67,13 @@ def predict_emotion(audio, sample_rate):
 
 # ✅ Streamlit UI
 st.title("🎙️ Speech Emotion Recognition")
-st.write("Choose between **uploading a file** or **live recording** to detect emotions.")
-
-# 🎤 Choose Input Method
-option = st.radio("Select an input method:", ["📂 Upload Audio File", "🎤 Live Recording"])
-
-# 🎤 Recording settings
-duration = 5  # Record for 5 seconds
-sampling_rate = 16000  # Required for the model
-
-# 🎤 Function to Record Audio and Save as WAV
-def record_audio(duration=5, sampling_rate=16000):
-    st.write("🔴 Recording... Speak now!")
-    audio = sd.rec(int(duration * sampling_rate), samplerate=sampling_rate, channels=1, dtype=np.float32)
-    sd.wait()  # Wait until recording is finished
-    st.write("✅ Recording complete!")
-
-    # Save as in-memory WAV file
-    wav_io = io.BytesIO()
-    sf.write(wav_io, audio, samplerate=sampling_rate, format='wav')
-    wav_io.seek(0)
-
-    return audio.flatten(), wav_io
+st.write("Upload a **.wav file** or **record live audio** to detect emotions.")
 
 # 📂 Upload Audio File
-if option == "📂 Upload Audio File":
-    uploaded_file = st.file_uploader("Upload a .wav file", type=["wav"])
-    if uploaded_file is not None:
-        st.audio(uploaded_file, format='audio/wav')
-        speech, sample_rate = sf.read(uploaded_file)
-        if len(speech.shape) == 2:  # Convert stereo to mono
-            speech = np.mean(speech, axis=1)
-        predict_emotion(speech, sample_rate)
-
-# 🎤 Live Recording
-# elif option == "🎤 Live Recording":
-#     if st.button("🎤 Start Recording"):
-#         recorded_audio, wav_file = record_audio(duration, sampling_rate)
-        
-#         # 🎵 Play back the recorded audio
-#         st.audio(wav_file, format="audio/wav")
-        
-#         # 🎵 Process for emotion detection
-#         predict_emotion(recorded_audio, sampling_rate)
+uploaded_file = st.file_uploader("Upload a .wav file", type=["wav"])
+if uploaded_file is not None:
+    st.audio(uploaded_file, format='audio/wav')
+    speech, sample_rate = sf.read(uploaded_file)
+    if len(speech.shape) == 2:
+        speech = np.mean(speech, axis=1)
+    predict_emotion(speech, sample_rate)
