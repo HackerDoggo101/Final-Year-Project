@@ -1,5 +1,5 @@
 import streamlit as st  
-import sounddevice as sd
+# import sounddevice as sd
 import soundfile as sf
 import numpy as np
 import torch
@@ -89,12 +89,12 @@ if option == "📂 Upload Audio File":
         predict_emotion(speech, sample_rate)
 
 # 🎤 Live Recording
-elif option == "🎤 Live Recording":
-    if st.button("🎤 Start Recording"):
-        recorded_audio, wav_file = record_audio(duration, sampling_rate)
+# elif option == "🎤 Live Recording":
+#     if st.button("🎤 Start Recording"):
+#         recorded_audio, wav_file = record_audio(duration, sampling_rate)
         
-        # 🎵 Play back the recorded audio
-        st.audio(wav_file, format="audio/wav")
+#         # 🎵 Play back the recorded audio
+#         st.audio(wav_file, format="audio/wav")
         
-        # 🎵 Process for emotion detection
-        predict_emotion(recorded_audio, sampling_rate)
+#         # 🎵 Process for emotion detection
+#         predict_emotion(recorded_audio, sampling_rate)
