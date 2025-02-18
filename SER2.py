@@ -15,15 +15,15 @@ st.set_page_config(page_title="Speech Emotion Recognition", page_icon="🎙️",
 # ✅ Load model
 @st.cache_resource
 def load_model():
-    processor = Wav2Vec2FeatureExtractor.from_pretrained("saved_hubert_model", local_files_only=True)
-    model = HubertForSequenceClassification.from_pretrained("saved_hubert_model", local_files_only=True)
+    processor = Wav2Vec2FeatureExtractor.from_pretrained("./saved_hubert_model", local_files_only=True)
+    model = HubertForSequenceClassification.from_pretrained("./saved_hubert_model", local_files_only=True)
     model.eval()
     return processor, model
 
 processor, model = load_model()
 
 # ✅ Load emotions map
-with open("emotions_map.json", "r") as f:
+with open("./emotions_map.json", "r") as f:
     emotions_map = json.load(f)
 emotions_map = {int(k): v for k, v in emotions_map.items()}
 
