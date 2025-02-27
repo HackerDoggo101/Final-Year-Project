@@ -10,3 +10,6 @@ I have deployed the system via Streamlit on HuggingFace spaces.<br>
 To access the system, please click the link down below.<br>
 https://huggingface.co/spaces/JasonYJ/SER
 
+![image](https://github.com/user-attachments/assets/44ffbf4a-17fa-414e-88e8-6271326b00fa)
+![image](https://github.com/user-attachments/assets/7b4d6068-66c8-4995-86d5-cc42332ce35f)
+
