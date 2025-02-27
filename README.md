@@ -1,4 +1,4 @@
-# SER-FYP-
+# SPEECH EMOTION RECOGNITION SYSTEM (FYP)
 Note: This project is still in the development stage
 
 Speech Emotion Recognition System trained using HuBERT. 
